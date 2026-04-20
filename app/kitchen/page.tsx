@@ -2,7 +2,7 @@
 
 import { useStore, Order } from "@/app/context/StoreContext"
 import { motion, AnimatePresence } from "framer-motion"
-import { Check, Clock } from "lucide-react"
+import { Check, Clock, ChefHat } from "lucide-react"
 
 export default function KitchenPage() {
   const { orders, markOrderDone, menuItems } = useStore()
