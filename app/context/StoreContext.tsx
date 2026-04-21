@@ -1,14 +1,28 @@
 "use client";
 
-import React, { createContext, useContext, useState, ReactNode } from "react";
-import { MENU_ITEMS } from "@/lib/mock-data";
+import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { io, Socket } from "socket.io-client";
+import { config } from "@/lib/config";
 
-export type OrderStatus = "preparing" | "ready" | "served";
+export interface MenuItem {
+  id: string;
+  name: string;
+  price: number;
+  category: string;
+  image: string;
+  description: string;
+}
+
+
+
+export type OrderStatus = "payment_pending" | "preparing" | "ready" | "served";
 export type PaymentStatus = "pending" | "paid";
 
 export interface OrderItem {
   menuItemId: string;
   qty: number;
+  name?: string;
+  price?: number;
 }
 
 export interface Order {
@@ -16,7 +30,8 @@ export interface Order {
   tableId: number;
   items: OrderItem[];
   status: OrderStatus;
-  createdAt: Date;
+  createdAt: string | Date;
+  totalAmount?: number;
 }
 
 export interface PaymentRequest {
@@ -25,11 +40,12 @@ export interface PaymentRequest {
   orderIds: string[];
   totalAmount: number;
   status: PaymentStatus;
-  createdAt: Date;
+  createdAt: string | Date;
+  items: OrderItem[];
 }
 
 interface StoreContextType {
-  menuItems: typeof MENU_ITEMS;
+  menuItems: MenuItem[];
   inventoryState: Record<string, boolean>; // menuId -> isAbsent
   toggleMealAvailability: (id: string) => void;
   
@@ -43,80 +59,76 @@ interface StoreContextType {
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
-// Generate some mock initial data
-const initialOrders: Order[] = [
-  {
-    id: "ORD-001",
-    tableId: 4,
-    items: [
-      { menuItemId: "m1", qty: 2 },
-      { menuItemId: "m3", qty: 1 },
-    ],
-    status: "preparing",
-    createdAt: new Date(Date.now() - 5 * 60000), // 5 mins ago
-  },
-  {
-    id: "ORD-002",
-    tableId: 12,
-    items: [
-      { menuItemId: "m2", qty: 1 },
-      { menuItemId: "m4", qty: 2 },
-    ],
-    status: "preparing",
-    createdAt: new Date(Date.now() - 2 * 60000),
-  },
-  {
-    id: "ORD-003",
-    tableId: 7,
-    items: [
-      { menuItemId: "m6", qty: 1 },
-      { menuItemId: "m7", qty: 2 },
-    ],
-    status: "ready", // Already done by kitchen
-    createdAt: new Date(Date.now() - 15 * 60000),
-  }
-];
-
-const initialPayments: PaymentRequest[] = [
-  {
-    id: "PAY-001",
-    tableId: 9,
-    orderIds: ["ORD-PREV-9"],
-    totalAmount: 45.50,
-    status: "pending",
-    createdAt: new Date(),
-  }
-];
-
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [inventoryState, setInventoryState] = useState<Record<string, boolean>>({
-    m3: true, // Example: Fries are absent
-  });
-  const [orders, setOrders] = useState<Order[]>(initialOrders);
-  const [paymentRequests, setPaymentRequests] = useState<PaymentRequest[]>(initialPayments);
+  const [inventoryState, setInventoryState] = useState<Record<string, boolean>>({});
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [socket, setSocket] = useState<Socket | null>(null);
+
+  useEffect(() => {
+    const s = io(config.apiUrl);
+
+    setSocket(s);
+
+    s.on("initial_state", (data) => {
+      setInventoryState(data.inventoryState || {});
+      setOrders(data.orders || []);
+      setMenuItems(data.menu || []);
+    });
+
+    s.on("inventory_update", (data) => {
+      setInventoryState(data);
+    });
+
+    s.on("orders_update", (ordersData) => {
+      setOrders(ordersData);
+    });
+
+    return () => {
+      s.disconnect();
+    };
+  }, []);
+
+  // Compute paymentRequests from orders with "payment_pending" status
+  const paymentRequests: PaymentRequest[] = orders
+    .filter(o => o.status === "payment_pending")
+    .map(o => ({
+      id: o.id,
+      tableId: o.tableId,
+      orderIds: [o.id],
+      totalAmount: o.totalAmount || 0,
+      status: "pending" as PaymentStatus,
+      createdAt: o.createdAt,
+      items: o.items || [],
+    }));
 
   const toggleMealAvailability = (id: string) => {
-    setInventoryState(prev => ({
-      ...prev,
-      [id]: !prev[id]
-    }));
+    if (socket) {
+      socket.emit("toggle_inventory", id);
+    }
   };
 
   const markOrderDone = (orderId: string) => {
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: "ready" } : o));
+    if (socket) {
+      socket.emit("mark_order_ready", orderId);
+    }
   };
   
   const markOrderServed = (orderId: string) => {
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: "served" } : o));
+    if (socket) {
+      socket.emit("mark_order_served", orderId);
+    }
   };
 
   const confirmPayment = (paymentId: string) => {
-    setPaymentRequests(prev => prev.filter(p => p.id !== paymentId));
+    if (socket) {
+      socket.emit("confirm_payment", paymentId); // In our model, paymentId is the same as orderId
+    }
   };
 
   return (
     <StoreContext.Provider value={{
-      menuItems: MENU_ITEMS,
+      menuItems,
       inventoryState,
       toggleMealAvailability,
       orders,

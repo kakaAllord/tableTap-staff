@@ -39,7 +39,7 @@ export default function KitchenPage() {
                 </div>
                 <div className="flex items-center gap-1.5 text-zinc-500 dark:text-zinc-400 text-sm font-medium">
                   <Clock className="w-4 h-4" />
-                  {Math.floor((new Date().getTime() - order.createdAt.getTime()) / 60000)}m ago
+                  {Math.floor((new Date().getTime() - new Date(order.createdAt).getTime()) / 60000)}m ago
                 </div>
               </div>
 

@@ -123,12 +123,19 @@ export default function WaiterPage() {
                 <div className="p-5 flex-1 bg-zinc-50/50 dark:bg-zinc-800/10 z-10">
                   <div className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">Order Summary</div>
                   <div className="space-y-2 text-sm">
-                    {/* Simulated details since we might not have all historical order items in context for payment easily. 
-                        In a real app, payment details would be fetched here. We'll show a short summary. */}
-                    <div className="flex justify-between text-zinc-700 dark:text-zinc-300 border-b border-zinc-200/50 dark:border-zinc-800/50 pb-2">
-                      <span>Various Items</span>
-                      <span>${payment.totalAmount.toFixed(2)}</span>
-                    </div>
+                    {payment.items && payment.items.length > 0 ? (
+                      payment.items.map((item, idx) => (
+                        <div key={idx} className="flex justify-between text-zinc-700 dark:text-zinc-300 border-b border-zinc-200/50 dark:border-zinc-800/50 pb-2">
+                          <span>{item.name || "Item"} x{item.qty}</span>
+                          <span>${((item.price || 0) * item.qty).toFixed(2)}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="flex justify-between text-zinc-700 dark:text-zinc-300 border-b border-zinc-200/50 dark:border-zinc-800/50 pb-2">
+                        <span>Various Items</span>
+                        <span>${payment.totalAmount.toFixed(2)}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
